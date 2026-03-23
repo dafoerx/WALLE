@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎙️ AI 语音对话 - DeepSeek</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface2: #334155;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #475569;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 头部 */
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-small {
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .btn-small:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        /* 聊天区域 */
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .message {
+            display: flex;
+            gap: 12px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user { flex-direction: row-reverse; }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .message.user .avatar { background: var(--primary); }
+        .message.ai .avatar { background: var(--success); }
+
+        .bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            line-height: 1.6;
+            font-size: 15px;
+        }
+
+        .message.user .bubble {
+            background: var(--primary);
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.ai .bubble {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+        }
+
+        .timing {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        /* 状态提示 */
+        .status-bar {
+            text-align: center;
+            padding: 8px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .status-bar.active {
+            color: var(--success);
+        }
+
+        /* 底部控制区 */
+        .controls {
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .record-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 3px solid var(--primary);
+            background: transparent;
+            color: var(--primary);
+            font-size: 32px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .record-btn:hover {
+            background: rgba(99, 102, 241, 0.1);
+            transform: scale(1.05);
+        }
+
+        .record-btn.recording {
+            border-color: var(--danger);
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+            animation: pulse 1.5s infinite;
+        }
+
+        .record-btn.processing {
+            border-color: var(--text-muted);
+            color: var(--text-muted);
+            cursor: wait;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+        }
+
+        .controls-hint {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* 语音选择器 */
+        .voice-selector {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .voice-chip {
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .voice-chip.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        /* 波形动画 */
+        .waveform {
+            display: none;
+            gap: 3px;
+            align-items: center;
+            height: 30px;
+        }
+
+        .waveform.active { display: flex; }
+
+        .waveform span {
+            width: 4px;
+            background: var(--danger);
+            border-radius: 2px;
+            animation: wave 0.8s ease-in-out infinite;
+        }
+
+        .waveform span:nth-child(1) { animation-delay: 0s; height: 10px; }
+        .waveform span:nth-child(2) { animation-delay: 0.1s; height: 20px; }
+        .waveform span:nth-child(3) { animation-delay: 0.2s; height: 30px; }
+        .waveform span:nth-child(4) { animation-delay: 0.3s; height: 20px; }
+        .waveform span:nth-child(5) { animation-delay: 0.4s; height: 10px; }
+
+        @keyframes wave {
+            0%, 100% { transform: scaleY(0.5); }
+            50% { transform: scaleY(1); }
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state .icon { font-size: 64px; margin-bottom: 16px; }
+        .empty-state p { font-size: 16px; line-height: 1.8; }
+    </style>
+</head>
+<body>
+    <!-- 头部 -->
+    <div class="header">
+        <h1>🎙️ AI 语音对话</h1>
+        <div class="header-actions">
+            <button class="btn-small" onclick="clearHistory()">🗑️ 清空对话</button>
+            <select id="voiceSelect" class="btn-small" onchange="changeVoice(this.value)">
+                <option value="xiaoxiao">晓晓 (温柔女声)</option>
+                <option value="xiaoyi">晓伊 (活泼女声)</option>
+                <option value="xiaoni">晓妮 (温暖女声)</option>
+                <option value="yunxi">云希 (阳光男声)</option>
+                <option value="yunjian">云健 (沉稳男声)</option>
+                <option value="yunyang">云扬 (播音男声)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- 聊天区域 -->
+    <div class="chat-container" id="chatContainer">
+        <div class="empty-state" id="emptyState">
+            <div class="icon">🎤</div>
+            <p>点击下方麦克风按钮开始对话<br>
+            <span style="font-size:13px; color: var(--text-muted);">
+                管线: 语音 → Whisper识别 → DeepSeek对话 → Edge-TTS合成 → 播放
+            </span></p>
+        </div>
+    </div>
+
+    <!-- 状态栏 -->
+    <div class="status-bar" id="statusBar">就绪 - 点击麦克风开始</div>
+
+    <!-- 底部控制 -->
+    <div class="controls">
+        <div class="waveform" id="waveform">
+            <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <button class="record-btn" id="recordBtn" onclick="toggleRecording()">
+            🎤
+        </button>
+        <div class="controls-hint">点击开始录音，再次点击停止并发送</div>
+    </div>
+
+    <!-- 音频播放器 (隐藏) -->
+    <audio id="audioPlayer" style="display:none;"></audio>
+
+    <script>
+        // ====== 状态管理 ======
+        let isRecording = false;
+        let isProcessing = false;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let audioQueue = [];
+        let isPlaying = false;
+
+        const recordBtn = document.getElementById('recordBtn');
+        const statusBar = document.getElementById('statusBar');
+        const chatContainer = document.getElementById('chatContainer');
+        const emptyState = document.getElementById('emptyState');
+        const waveform = document.getElementById('waveform');
+        const audioPlayer = document.getElementById('audioPlayer');
+
+        // ====== 录音控制 ======
+        async function toggleRecording() {
+            if (isProcessing) return;
+
+            if (isRecording) {
+                stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        sampleRate: 16000,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                    }
+                });
+
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                        ? 'audio/webm;codecs=opus'
+                        : 'audio/webm'
+                });
+
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) audioChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    stream.getTracks().forEach(t => t.stop());
+                    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                    if (blob.size > 0) {
+                        sendAudio(blob);
+                    }
+                };
+
+                mediaRecorder.start(100); // 每100ms收集一次
+                isRecording = true;
+                recordBtn.classList.add('recording');
+                recordBtn.innerHTML = '⏹';
+                waveform.classList.add('active');
+                setStatus('🔴 正在录音...', true);
+
+            } catch (err) {
+                console.error('麦克风访问失败:', err);
+                setStatus('❌ 无法访问麦克风，请检查权限');
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            isRecording = false;
+            recordBtn.classList.remove('recording');
+            recordBtn.innerHTML = '🎤';
+            waveform.classList.remove('active');
+        }
+
+        // ====== 发送音频 ======
+        async function sendAudio(blob) {
+            isProcessing = true;
+            recordBtn.classList.add('processing');
+            setStatus('⏳ 正在识别语音...');
+
+            const formData = new FormData();
+            formData.append('audio', blob, 'recording.webm');
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    // 隐藏空状态
+                    if (emptyState) emptyState.style.display = 'none';
+
+                    // 添加用户消息
+                    addMessage('user', data.user_text);
+
+                    // 添加AI回复
+                    const timingStr = data.timing
+                        ? `STT: ${data.timing.stt}s | LLM: ${data.timing.llm}s | TTS: ${data.timing.tts}s | 总计: ${data.timing.total}s`
+                        : '';
+                    addMessage('ai', data.reply_text, timingStr);
+
+                    // 播放音频
+                    if (data.audio) {
+                        playAudioBase64(data.audio);
+                    }
+
+                    setStatus('✅ 回复完成，点击麦克风继续对话');
+                } else {
+                    setStatus('⚠️ ' + (data.error || '识别失败'));
+                }
+
+            } catch (err) {
+                console.error('请求失败:', err);
+                setStatus('❌ 网络错误: ' + err.message);
+            } finally {
+                isProcessing = false;
+                recordBtn.classList.remove('processing');
+            }
+        }
+
+        // ====== UI 函数 ======
+        function addMessage(role, text, timing = '') {
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+
+            const avatar = role === 'user' ? '👤' : '🤖';
+            let html = `
+                <div class="avatar">${avatar}</div>
+                <div>
+                    <div class="bubble">${escapeHtml(text)}</div>
+                    ${timing ? `<div class="timing">${timing}</div>` : ''}
+                </div>
+            `;
+
+            div.innerHTML = html;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function setStatus(text, active = false) {
+            statusBar.textContent = text;
+            statusBar.className = 'status-bar' + (active ? ' active' : '');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // ====== 音频播放 ======
+        function playAudioBase64(b64) {
+            const bytes = atob(b64);
+            const arr = new Uint8Array(bytes.length);
+            for (let i = 0; i < bytes.length; i++) {
+                arr[i] = bytes.charCodeAt(i);
+            }
+            const blob = new Blob([arr], { type: 'audio/mpeg' });
+            const url = URL.createObjectURL(blob);
+
+            audioPlayer.src = url;
+            audioPlayer.play().catch(e => console.warn('播放失败:', e));
+
+            audioPlayer.onended = () => {
+                URL.revokeObjectURL(url);
+            };
+        }
+
+        // ====== 操作按钮 ======
+        async function clearHistory() {
+            await fetch('/api/clear', { method: 'POST' });
+            chatContainer.innerHTML = `
+                <div class="empty-state" id="emptyState">
+                    <div class="icon">🎤</div>
+                    <p>点击下方麦克风按钮开始对话</p>
+                </div>
+            `;
+            setStatus('🗑️ 对话已清空');
+        }
+
+        async function changeVoice(key) {
+            await fetch(`/api/voice/${key}`, { method: 'POST' });
+            setStatus(`🔊 语音已切换: ${key}`);
+        }
+
+        // ====== 键盘快捷键 ======
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'SELECT') {
+                e.preventDefault();
+                toggleRecording();
+            }
+        });
+    </script>
+</body>
+</html>
