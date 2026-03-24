@@ -69,6 +69,66 @@
             border-color: var(--primary);
         }
 
+        /* 语音输出开关 */
+        .toggle-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: var(--surface2);
+            border-radius: 24px;
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            left: 2px;
+            bottom: 2px;
+            background: var(--text-muted);
+            border-radius: 50%;
+            transition: all 0.3s;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(20px);
+            background: white;
+        }
+
+        .toggle-label {
+            user-select: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
         /* 聊天区域 */
         .chat-container {
             flex: 1;
@@ -270,7 +330,15 @@
     <div class="header">
         <h1>🎙️ AI 语音对话</h1>
         <div class="header-actions">
-            <button class="btn-small" onclick="clearHistory()">🗑️ 清空对话</button>
+            <div class="toggle-wrap" id="voiceToggleWrap">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="voiceOutputToggle" checked onchange="toggleVoiceOutput(this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-label" onclick="document.getElementById('voiceOutputToggle').click()">
+                    🔊 <span id="voiceToggleText">语音已开</span>
+                </span>
+            </div>
             <select id="voiceSelect" class="btn-small" onchange="changeVoice(this.value)">
                 <option value="xiaoxiao">晓晓 (温柔女声)</option>
                 <option value="xiaoyi">晓伊 (活泼女声)</option>
@@ -279,6 +347,7 @@
                 <option value="yunjian">云健 (沉稳男声)</option>
                 <option value="yunyang">云扬 (播音男声)</option>
             </select>
+            <button class="btn-small" onclick="clearHistory()">🗑️ 清空对话</button>
         </div>
     </div>
 
@@ -318,6 +387,9 @@
         let audioChunks = [];
         let audioQueue = [];
         let isPlaying = false;
+        let voiceOutputEnabled = true;  // 语音输出开关，默认开启
+        let audioContext = null;        // AudioContext 用于解锁浏览器音频
+        let audioUnlocked = false;      // 标记音频是否已解锁
 
         const recordBtn = document.getElementById('recordBtn');
         const statusBar = document.getElementById('statusBar');
@@ -325,10 +397,86 @@
         const emptyState = document.getElementById('emptyState');
         const waveform = document.getElementById('waveform');
         const audioPlayer = document.getElementById('audioPlayer');
+        const voiceSelect = document.getElementById('voiceSelect');
+
+        // ====== AudioContext 解锁机制 ======
+        // 浏览器安全策略要求：必须在用户交互（点击/触摸）后才能播放音频
+        // 这里在首次用户交互时创建并解锁 AudioContext
+        function unlockAudio() {
+            if (audioUnlocked) return;
+
+            try {
+                // 创建 AudioContext
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                // 如果 AudioContext 被挂起，恢复它
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+
+                // 播放一段静音来解锁 <audio> 元素
+                const silentBuffer = audioContext.createBuffer(1, 1, 22050);
+                const source = audioContext.createBufferSource();
+                source.buffer = silentBuffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+
+                // 同时解锁 <audio> 元素
+                audioPlayer.muted = true;
+                const playPromise = audioPlayer.play();
+                if (playPromise) {
+                    playPromise.then(() => {
+                        audioPlayer.pause();
+                        audioPlayer.muted = false;
+                        audioPlayer.currentTime = 0;
+                    }).catch(() => {
+                        audioPlayer.muted = false;
+                    });
+                }
+
+                audioUnlocked = true;
+                console.log('🔓 音频已解锁');
+            } catch (e) {
+                console.warn('音频解锁失败:', e);
+            }
+        }
+
+        // 在多种用户交互事件上尝试解锁
+        ['click', 'touchstart', 'keydown'].forEach(evt => {
+            document.addEventListener(evt, unlockAudio, { once: false, passive: true });
+        });
+
+        // ====== 语音输出开关 ======
+        function toggleVoiceOutput(enabled) {
+            voiceOutputEnabled = enabled;
+            const toggleText = document.getElementById('voiceToggleText');
+            const label = document.querySelector('.toggle-label');
+
+            if (enabled) {
+                toggleText.textContent = '语音已开';
+                label.querySelector('span:first-child') || null;
+                // 更新图标
+                label.innerHTML = '🔊 <span id="voiceToggleText">语音已开</span>';
+                voiceSelect.disabled = false;
+                voiceSelect.style.opacity = '1';
+                setStatus('🔊 语音输出已开启');
+            } else {
+                toggleText.textContent = '语音已关';
+                label.innerHTML = '🔇 <span id="voiceToggleText">语音已关</span>';
+                voiceSelect.disabled = true;
+                voiceSelect.style.opacity = '0.4';
+                setStatus('🔇 语音输出已关闭，仅文字回复');
+            }
+        }
 
         // ====== 录音控制 ======
         async function toggleRecording() {
             if (isProcessing) return;
+
+            // 首次点击时确保音频解锁
+            unlockAudio();
 
             if (isRecording) {
                 stopRecording();
@@ -368,7 +516,7 @@
                     }
                 };
 
-                mediaRecorder.start(100); // 每100ms收集一次
+                mediaRecorder.start(100);
                 isRecording = true;
                 recordBtn.classList.add('recording');
                 recordBtn.innerHTML = '⏹';
@@ -399,6 +547,8 @@
 
             const formData = new FormData();
             formData.append('audio', blob, 'recording.webm');
+            // 告知后端是否需要 TTS 语音输出
+            formData.append('voice_output', voiceOutputEnabled ? '1' : '0');
 
             try {
                 const res = await fetch('/api/chat', {
@@ -415,18 +565,18 @@
                     // 添加用户消息
                     addMessage('user', data.user_text);
 
-                    // 添加AI回复
+                    // 添加AI回复（始终显示文字）
                     const timingStr = data.timing
                         ? `STT: ${data.timing.stt}s | LLM: ${data.timing.llm}s | TTS: ${data.timing.tts}s | 总计: ${data.timing.total}s`
                         : '';
                     addMessage('ai', data.reply_text, timingStr);
 
-                    // 播放音频
-                    if (data.audio) {
+                    // 语音开启时播放音频
+                    if (voiceOutputEnabled && data.audio) {
                         playAudioBase64(data.audio);
+                    } else {
+                        setStatus('✅ 回复完成，点击麦克风继续对话');
                     }
-
-                    setStatus('✅ 回复完成，点击麦克风继续对话');
                 } else {
                     setStatus('⚠️ ' + (data.error || '识别失败'));
                 }
@@ -470,22 +620,66 @@
             return div.innerHTML;
         }
 
-        // ====== 音频播放 ======
+        // ====== 音频播放（修复浏览器无法输出声音） ======
         function playAudioBase64(b64) {
-            const bytes = atob(b64);
-            const arr = new Uint8Array(bytes.length);
-            for (let i = 0; i < bytes.length; i++) {
-                arr[i] = bytes.charCodeAt(i);
+            try {
+                const bytes = atob(b64);
+                const arr = new Uint8Array(bytes.length);
+                for (let i = 0; i < bytes.length; i++) {
+                    arr[i] = bytes.charCodeAt(i);
+                }
+                const blob = new Blob([arr], { type: 'audio/mpeg' });
+                const url = URL.createObjectURL(blob);
+
+                // 确保 AudioContext 已恢复
+                if (audioContext && audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+
+                audioPlayer.src = url;
+                audioPlayer.volume = 1.0;
+
+                const playPromise = audioPlayer.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        setStatus('🔊 正在播放语音回复...');
+                    }).catch(err => {
+                        console.warn('自动播放被阻止，尝试恢复:', err);
+                        // 如果播放失败，尝试通过 AudioContext 解码播放
+                        playViaAudioContext(arr.buffer);
+                    });
+                }
+
+                audioPlayer.onended = () => {
+                    URL.revokeObjectURL(url);
+                    setStatus('✅ 回复完成，点击麦克风继续对话');
+                };
+
+            } catch (e) {
+                console.error('音频播放错误:', e);
+                setStatus('✅ 回复完成（音频播放失败）');
             }
-            const blob = new Blob([arr], { type: 'audio/mpeg' });
-            const url = URL.createObjectURL(blob);
+        }
 
-            audioPlayer.src = url;
-            audioPlayer.play().catch(e => console.warn('播放失败:', e));
+        // 备用播放方案：通过 AudioContext 解码播放
+        function playViaAudioContext(arrayBuffer) {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
 
-            audioPlayer.onended = () => {
-                URL.revokeObjectURL(url);
-            };
+            audioContext.decodeAudioData(arrayBuffer.slice(0), (buffer) => {
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+                setStatus('🔊 正在播放语音回复...');
+                source.onended = () => {
+                    setStatus('✅ 回复完成，点击麦克风继续对话');
+                };
+            }, (err) => {
+                console.error('AudioContext 解码失败:', err);
+                setStatus('✅ 回复完成（音频播放失败）');
+            });
         }
 
         // ====== 操作按钮 ======

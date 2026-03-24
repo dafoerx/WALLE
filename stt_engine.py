@@ -4,6 +4,7 @@ STT 模块 - 语音转文字
 """
 
 import os
+import subprocess
 import io
 import tempfile
 import logging
@@ -71,8 +72,10 @@ class STTEngine:
         self._load_model()
 
         try:
-            # 尝试用 soundfile 读取
-            audio_data, sr = sf.read(io.BytesIO(audio_bytes))
+            # 解码音频 (支持 WebM/WAV/OGG)
+            audio_data = self._decode_audio(audio_bytes)
+            if audio_data is None:
+                return ""
 
             # 转为单声道
             if len(audio_data.shape) > 1:
@@ -101,6 +104,31 @@ class STTEngine:
         except Exception as e:
             logger.error(f"STT 识别失败: {e}")
             return ""
+
+    def _decode_audio(self, ab):
+        try:
+            d,sr=sf.read(io.BytesIO(ab))
+            logger.info(f"sf ok sr={sr}")
+            return d
+        except Exception:
+            pass
+        try:
+            from pydub import AudioSegment
+            import tempfile as _t
+            with _t.NamedTemporaryFile(suffix='.webm',delete=False) as f:
+                f.write(ab);tmp=f.name
+            try:
+                s=AudioSegment.from_file(tmp)
+                s=s.set_frame_rate(16000).set_channels(1)
+                b=io.BytesIO();s.export(b,format='wav');b.seek(0)
+                d,sr=sf.read(b)
+                logger.info(f"pydub ok sr={sr}")
+                return d
+            finally:
+                os.path.exists(tmp) and os.remove(tmp)
+        except Exception as e:
+            logger.warning(f"pydub:{e}")
+        return None
 
     def transcribe_file(self, file_path: str) -> str:
         """从文件路径转录"""

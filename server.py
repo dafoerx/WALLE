@@ -12,7 +12,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -81,16 +81,18 @@ async def index():
 
 
 @app.post("/api/chat")
-async def chat_api(audio: UploadFile = File(...)):
+async def chat_api(audio: UploadFile = File(...), voice_output: str = Form("1")):
     """
     HTTP 接口 - 完整管线
-    接收音频 → STT → LLM → TTS → 返回音频
+    接收音频 → STT → LLM → (可选)TTS → 返回结果
+    :param voice_output: "1" 返回语音+文字, "0" 仅返回文字
     """
     total_start = time.time()
+    enable_tts = voice_output == "1"
 
     # 1. 读取上传的音频
     audio_bytes = await audio.read()
-    logger.info(f"📥 收到音频: {len(audio_bytes)} bytes")
+    logger.info(f"📥 收到音频: {len(audio_bytes)} bytes, 语音输出: {'开' if enable_tts else '关'}")
 
     # 2. STT: 语音 → 文字
     stt_start = time.time()
@@ -112,32 +114,30 @@ async def chat_api(audio: UploadFile = File(...)):
     llm_time = time.time() - llm_start
     logger.info(f"🤖 AI回复: {reply_text} (LLM耗时: {llm_time:.2f}s)")
 
-    # 4. TTS: 回复 → 语音
-    tts_start = time.time()
-    audio_data = await tts.synthesize_async(reply_text)
-    tts_time = time.time() - tts_start
+    # 4. TTS: 回复 → 语音（仅在语音输出开启时执行）
+    tts_time = 0
+    audio_b64 = None
+    if enable_tts:
+        tts_start = time.time()
+        audio_data = await tts.synthesize_async(reply_text)
+        tts_time = time.time() - tts_start
+
+        if audio_data:
+            import base64
+            audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+    else:
+        logger.info("⏭️  语音输出已关闭，跳过TTS合成")
 
     total_time = time.time() - total_start
     logger.info(f"⏱️  总耗时: {total_time:.2f}s (STT:{stt_time:.2f} + LLM:{llm_time:.2f} + TTS:{tts_time:.2f})")
 
-    if not audio_data:
-        return JSONResponse(content={
-            "success": True,
-            "user_text": user_text,
-            "reply_text": reply_text,
-            "audio": None,
-            "timing": {"stt": stt_time, "llm": llm_time, "tts": tts_time, "total": total_time},
-        })
-
     # 返回结果
-    import base64
-    audio_b64 = base64.b64encode(audio_data).decode("utf-8")
-
     return JSONResponse(content={
         "success": True,
         "user_text": user_text,
         "reply_text": reply_text,
         "audio": audio_b64,
+        "voice_output": enable_tts,
         "timing": {
             "stt": round(stt_time, 2),
             "llm": round(llm_time, 2),
