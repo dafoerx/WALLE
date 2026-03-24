@@ -35,7 +35,9 @@ logger = logging.getLogger("VoiceChat")
 
 # 导入引擎
 from stt_engine import STTEngine
-from llm_engine import LLMEngine
+# from llm_engine import LLMEngine  # 原始版本有SSL问题
+# 使用修复的简单版本
+from llm_engine_simple import LLMEngineSimple as LLMEngine
 from tts_engine import TTSEngine
 from tools import TOOL_SCHEMAS, execute_tool
 

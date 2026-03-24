@@ -1,27 +1,161 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-venv/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# 环境配置（含API Key）
-.env
-
-# 测试产物
-test_output.mp3
-
-# SSL 证书（自签名）
-*.pem
-
-# 日志 & 备份
-server.log
-*.bak
+# Virtual Environment
+venv/
+env/
+ENV/
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+
+# Logs
+*.log
+walle.log
+proxy.log
+
+# SSL Certificates
+*.pem
+*.key
+cert.pem
+key.pem
+proxy_cert.pem
+proxy_key.pem
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Backup files
+*.backup
+*.bak
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Test coverage
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# dotenv
+.env
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Temporary files
+*.tmp
+temp/
+
+# Process IDs
+*.pid
+.pid
+
+# Session files
+.session
+.sock
+
+# Database
+*.db
+*.sqlite3
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python virtual environment
+venv/
+pythonenv/
+
+# SSL certificates (generated)
+cert.pem
+key.pem
+proxy_cert.pem
+proxy_key.pem
+
+# Environment files with secrets
+.env
+.env.*
+!.env.example
+
+# Backup files with secrets
+*.backup.*
+.env.backup.*
