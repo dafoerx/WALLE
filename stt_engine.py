@@ -18,15 +18,26 @@ logger = logging.getLogger(__name__)
 class STTEngine:
     """语音转文字引擎 - 基于 faster-whisper"""
 
+    # 中英混杂提示词 —— 帮助 Whisper 识别常见英文专有名词
+    DEFAULT_PROMPT = (
+        "以下是普通话和英文的对话。"
+        "Hacker News, GitHub, star, Python, JavaScript, TypeScript, "
+        "Docker, Kubernetes, React, Vue, API, Linux, OpenAI, "
+        "ChatGPT, DeepSeek, TAPD, Whisper, VS Code, npm, "
+        "pull request, merge, deploy, commit, push"
+    )
+
     def __init__(
         self,
         model_size: str = "base",
         language: str = "zh",
         device: str = "auto",
+        initial_prompt: str = None,
     ):
         self.model_size = model_size
         self.language = language
         self.device = device
+        self.initial_prompt = initial_prompt or self.DEFAULT_PROMPT
         self.model = None
 
     def _load_model(self):
@@ -89,11 +100,13 @@ class STTEngine:
                 audio_data,
                 language=self.language,
                 beam_size=5,
+                best_of=5,
                 vad_filter=True,  # 启用 VAD 过滤静音
                 vad_parameters=dict(
                     min_silence_duration_ms=500,
                     speech_pad_ms=300,
                 ),
+                initial_prompt=self.initial_prompt,  # 中英混杂提示词
             )
 
             # 拼接结果
@@ -139,7 +152,9 @@ class STTEngine:
                 file_path,
                 language=self.language,
                 beam_size=5,
+                best_of=5,
                 vad_filter=True,
+                initial_prompt=self.initial_prompt,
             )
             text = "".join([seg.text for seg in segments]).strip()
             logger.info(f"STT 识别结果: {text}")
