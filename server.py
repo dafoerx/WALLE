@@ -37,6 +37,7 @@ logger = logging.getLogger("VoiceChat")
 from stt_engine import STTEngine
 from llm_engine import LLMEngine
 from tts_engine import TTSEngine
+from tools import TOOL_SCHEMAS, execute_tool
 
 # ======== 全局配置 ========
 CONFIG = {
@@ -64,6 +65,8 @@ llm = LLMEngine(
     api_key=CONFIG["deepseek_api_key"],
     base_url=CONFIG["deepseek_base_url"],
     model=CONFIG["deepseek_model"],
+    tools=TOOL_SCHEMAS,
+    tool_executor=execute_tool,
 )
 
 tts = TTSEngine(
@@ -167,6 +170,8 @@ async def websocket_chat(websocket: WebSocket):
         api_key=CONFIG["deepseek_api_key"],
         base_url=CONFIG["deepseek_base_url"],
         model=CONFIG["deepseek_model"],
+        tools=TOOL_SCHEMAS,
+        tool_executor=execute_tool,
     )
 
     try:
@@ -255,6 +260,7 @@ if __name__ == "__main__":
     protocol = "https" if use_ssl else "http"
     logger.info(f"🌐 服务地址: {protocol}://localhost:{CONFIG['server_port']}")
     logger.info(f"🧠 LLM: DeepSeek ({CONFIG['deepseek_model']})")
+    logger.info(f"🔧 Tools: {len(TOOL_SCHEMAS)} 个工具已注册")
     logger.info(f"🎤 STT: Whisper ({CONFIG['whisper_model']})")
     logger.info(f"🔊 TTS: Edge-TTS ({CONFIG['tts_voice']})")
     if use_ssl:
