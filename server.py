@@ -4,6 +4,7 @@ Voice Chat Server - 语音对话主服务
 """
 
 import os
+import sys
 import io
 import json
 import asyncio
@@ -11,6 +12,11 @@ import logging
 import tempfile
 import time
 from pathlib import Path
+
+# 确保当前 Python 环境的 bin 目录在 PATH 中（ffmpeg/ffprobe 依赖此路径）
+_env_bin = str(Path(sys.executable).resolve().parent)
+if _env_bin not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = _env_bin + os.pathsep + os.environ.get("PATH", "")
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -240,10 +246,27 @@ async def change_voice(voice_key: str):
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info(f"🌐 服务地址: http://localhost:{CONFIG['server_port']}")
+    # 检测 SSL 证书，优先 HTTPS 启动（远程 IP 访问麦克风必须 HTTPS）
+    base_dir = Path(__file__).resolve().parent
+    cert_file = base_dir / "cert.pem"
+    key_file = base_dir / "key.pem"
+    use_ssl = cert_file.exists() and key_file.exists()
+
+    protocol = "https" if use_ssl else "http"
+    logger.info(f"🌐 服务地址: {protocol}://localhost:{CONFIG['server_port']}")
     logger.info(f"🧠 LLM: DeepSeek ({CONFIG['deepseek_model']})")
     logger.info(f"🎤 STT: Whisper ({CONFIG['whisper_model']})")
     logger.info(f"🔊 TTS: Edge-TTS ({CONFIG['tts_voice']})")
+    if use_ssl:
+        logger.info(f"🔒 SSL 已启用（自签名证书），远程访问麦克风可用")
+    else:
+        logger.info(f"⚠️  未检测到 SSL 证书，远程 IP 访问将无法使用麦克风")
+        logger.info(f"   生成证书: openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj '/CN=WALLE'")
+
+    ssl_kwargs = {}
+    if use_ssl:
+        ssl_kwargs["ssl_certfile"] = str(cert_file)
+        ssl_kwargs["ssl_keyfile"] = str(key_file)
 
     uvicorn.run(
         "server:app",
@@ -251,4 +274,5 @@ if __name__ == "__main__":
         port=CONFIG["server_port"],
         reload=False,
         log_level="info",
+        **ssl_kwargs,
     )

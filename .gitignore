@@ -11,6 +11,13 @@ venv/
 # 测试产物
 test_output.mp3
 
+# SSL 证书（自签名）
+*.pem
+
+# 日志 & 备份
+server.log
+*.bak
+
 # IDE
 .vscode/
 .idea/
