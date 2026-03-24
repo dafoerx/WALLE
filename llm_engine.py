@@ -6,6 +6,7 @@ LLM 模块 - DeepSeek 对话引擎
 import os
 import json
 import logging
+import threading
 from typing import Generator, List, Dict, Optional, Any
 from openai import OpenAI
 
@@ -43,6 +44,7 @@ class LLMEngine:
         self.max_history = max_history
         self.tools = tools  # Function Calling 工具定义
         self.tool_executor = tool_executor  # 工具执行函数: (name, args) -> str
+        self._stop_event = threading.Event()  # 中断标志
 
         # 对话历史
         self.messages: List[Dict[str, Any]] = [
@@ -66,6 +68,7 @@ class LLMEngine:
         if not user_text.strip():
             return ""
 
+        self._stop_event.clear()
         self.messages.append({"role": "user", "content": user_text})
         self._trim_history()
 
@@ -73,6 +76,12 @@ class LLMEngine:
             # 工具调用循环（最多 5 轮，防止无限循环）
             max_rounds = 5
             for round_i in range(max_rounds):
+                # 检查是否被中断
+                if self._stop_event.is_set():
+                    logger.info("⏹ LLM 生成被用户中断")
+                    reply = "（已停止回复）"
+                    self.messages.append({"role": "assistant", "content": reply})
+                    return reply
                 # 构建请求参数
                 kwargs = {
                     "model": self.model,
@@ -240,3 +249,8 @@ class LLMEngine:
         """清空对话历史"""
         self.messages = [{"role": "system", "content": self.system_prompt}]
         logger.info("对话历史已清空")
+
+    def stop(self):
+        """中断当前正在进行的生成"""
+        self._stop_event.set()
+        logger.info("⏹ 收到停止请求")

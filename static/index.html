@@ -251,6 +251,46 @@
             cursor: wait;
         }
 
+        /* 停止按钮 */
+        .stop-btn {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: 2px solid var(--danger);
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+            font-size: 22px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            position: absolute;
+            right: -80px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .stop-btn.visible {
+            display: flex;
+        }
+
+        .stop-btn:hover {
+            background: rgba(239, 68, 68, 0.3);
+            transform: translateY(-50%) scale(1.1);
+        }
+
+        .stop-btn:active {
+            transform: translateY(-50%) scale(0.95);
+        }
+
+        .btn-group {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         @keyframes pulse {
             0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
             50% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
@@ -370,10 +410,15 @@
         <div class="waveform" id="waveform">
             <span></span><span></span><span></span><span></span><span></span>
         </div>
-        <button class="record-btn" id="recordBtn" onclick="toggleRecording()">
-            🎤
-        </button>
-        <div class="controls-hint">点击开始录音，再次点击停止并发送</div>
+        <div class="btn-group">
+            <button class="record-btn" id="recordBtn" onclick="toggleRecording()">
+                🎤
+            </button>
+            <button class="stop-btn" id="stopBtn" onclick="stopReply()" title="停止回复">
+                ⏹
+            </button>
+        </div>
+        <div class="controls-hint" id="controlsHint">点击开始录音，再次点击停止并发送</div>
     </div>
 
     <!-- 音频播放器 (隐藏) -->
@@ -390,14 +435,18 @@
         let voiceOutputEnabled = true;  // 语音输出开关，默认开启
         let audioContext = null;        // AudioContext 用于解锁浏览器音频
         let audioUnlocked = false;      // 标记音频是否已解锁
+        let abortController = null;     // 用于取消正在进行的请求
+        let currentAudioSource = null;  // 当前正在播放的音频源
 
         const recordBtn = document.getElementById('recordBtn');
+        const stopBtn = document.getElementById('stopBtn');
         const statusBar = document.getElementById('statusBar');
         const chatContainer = document.getElementById('chatContainer');
         const emptyState = document.getElementById('emptyState');
         const waveform = document.getElementById('waveform');
         const audioPlayer = document.getElementById('audioPlayer');
         const voiceSelect = document.getElementById('voiceSelect');
+        const controlsHint = document.getElementById('controlsHint');
 
         // ====== AudioContext 解锁机制 ======
         // 浏览器安全策略要求：必须在用户交互（点击/触摸）后才能播放音频
@@ -539,11 +588,54 @@
             waveform.classList.remove('active');
         }
 
+        // ====== 停止/取消控制 ======
+        function showStopBtn() {
+            stopBtn.classList.add('visible');
+            controlsHint.textContent = '点击 ⏹ 停止回复';
+        }
+
+        function hideStopBtn() {
+            stopBtn.classList.remove('visible');
+            controlsHint.textContent = '点击开始录音，再次点击停止并发送';
+        }
+
+        function stopReply() {
+            // 1. 取消正在进行的HTTP请求
+            if (abortController) {
+                abortController.abort();
+                abortController = null;
+            }
+
+            // 2. 停止音频播放
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+            audioPlayer.src = '';
+
+            // 3. 如果有 AudioContext 播放的源，也停止
+            if (currentAudioSource) {
+                try { currentAudioSource.stop(); } catch(e) {}
+                currentAudioSource = null;
+            }
+
+            // 4. 调用后端停止接口
+            fetch('/api/stop', { method: 'POST' }).catch(() => {});
+
+            // 5. 恢复UI状态
+            isProcessing = false;
+            recordBtn.classList.remove('processing');
+            hideStopBtn();
+            setStatus('⏹ 已停止回复，点击麦克风继续对话');
+        }
+
         // ====== 发送音频 ======
         async function sendAudio(blob) {
             isProcessing = true;
             recordBtn.classList.add('processing');
             setStatus('⏳ 正在识别语音...');
+            showStopBtn();
+
+            // 创建 AbortController 用于取消请求
+            abortController = new AbortController();
 
             const formData = new FormData();
             formData.append('audio', blob, 'recording.webm');
@@ -554,6 +646,7 @@
                 const res = await fetch('/api/chat', {
                     method: 'POST',
                     body: formData,
+                    signal: abortController.signal,
                 });
 
                 const data = await res.json();
@@ -575,18 +668,27 @@
                     if (voiceOutputEnabled && data.audio) {
                         playAudioBase64(data.audio);
                     } else {
+                        hideStopBtn();
                         setStatus('✅ 回复完成，点击麦克风继续对话');
                     }
                 } else {
+                    hideStopBtn();
                     setStatus('⚠️ ' + (data.error || '识别失败'));
                 }
 
             } catch (err) {
-                console.error('请求失败:', err);
-                setStatus('❌ 网络错误: ' + err.message);
+                if (err.name === 'AbortError') {
+                    // 用户主动取消，不报错
+                    console.log('请求已取消');
+                } else {
+                    console.error('请求失败:', err);
+                    setStatus('❌ 网络错误: ' + err.message);
+                }
+                hideStopBtn();
             } finally {
                 isProcessing = false;
                 recordBtn.classList.remove('processing');
+                abortController = null;
             }
         }
 
@@ -652,11 +754,13 @@
 
                 audioPlayer.onended = () => {
                     URL.revokeObjectURL(url);
+                    hideStopBtn();
                     setStatus('✅ 回复完成，点击麦克风继续对话');
                 };
 
             } catch (e) {
                 console.error('音频播放错误:', e);
+                hideStopBtn();
                 setStatus('✅ 回复完成（音频播放失败）');
             }
         }
@@ -672,12 +776,16 @@
                 source.buffer = buffer;
                 source.connect(audioContext.destination);
                 source.start(0);
+                currentAudioSource = source;  // 保存引用以便停止
                 setStatus('🔊 正在播放语音回复...');
                 source.onended = () => {
+                    currentAudioSource = null;
+                    hideStopBtn();
                     setStatus('✅ 回复完成，点击麦克风继续对话');
                 };
             }, (err) => {
                 console.error('AudioContext 解码失败:', err);
+                hideStopBtn();
                 setStatus('✅ 回复完成（音频播放失败）');
             });
         }
@@ -704,6 +812,11 @@
             if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'SELECT') {
                 e.preventDefault();
                 toggleRecording();
+            }
+            // Escape 键停止回复
+            if (e.code === 'Escape' && (isProcessing || audioPlayer.src)) {
+                e.preventDefault();
+                stopReply();
             }
         });
     </script>

@@ -234,6 +234,14 @@ async def clear_history():
     return JSONResponse(content={"success": True, "message": "对话历史已清空"})
 
 
+@app.post("/api/stop")
+async def stop_generation():
+    """停止当前 LLM 生成"""
+    llm.stop()
+    logger.info("⏹ 用户请求停止回复")
+    return JSONResponse(content={"success": True, "message": "已发送停止信号"})
+
+
 @app.get("/api/voices")
 async def list_voices():
     """获取可用语音列表"""
